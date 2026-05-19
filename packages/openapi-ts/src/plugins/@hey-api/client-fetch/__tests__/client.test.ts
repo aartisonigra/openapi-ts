@@ -441,6 +441,39 @@ describe('request interceptor', () => {
       client.interceptors.request.eject(interceptorId);
     },
   );
+
+  it('applies interceptor mutations to baseUrl for SSE url', async () => {
+    const mockResponse = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'text/event-stream',
+        },
+        status: 200,
+      },
+    );
+
+    const mockFetch: MockFetch = vi.fn().mockResolvedValueOnce(mockResponse);
+    const interceptorId = client.interceptors.request.use((options: ResolvedRequestOptions) => {
+      options.baseUrl = 'https://intercepted.com';
+      return options;
+    });
+
+    const sse = await client.sse.get({
+      fetch: mockFetch,
+      url: '/test',
+    });
+
+    await sse.stream.next();
+
+    expect(mockFetch).toHaveBeenCalledWith('https://intercepted.com/test', expect.anything());
+
+    client.interceptors.request.eject(interceptorId);
+  });
 });
 
 describe('error interceptor for fetch exceptions', () => {

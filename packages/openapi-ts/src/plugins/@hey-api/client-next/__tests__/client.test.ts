@@ -285,4 +285,125 @@ describe('request interceptor', () => {
       client.interceptors.request.eject(interceptorId);
     },
   );
+
+  it('applies interceptor mutations to baseUrl to the final URL', async () => {
+    const mockResponse = new Response(JSON.stringify({ success: true }), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      status: 200,
+    });
+
+    const mockFetch: MockFetch = vi.fn().mockResolvedValueOnce(mockResponse);
+
+    const mockRequestInterceptor = vi.fn().mockImplementation((options: ResolvedRequestOptions) => {
+      options.baseUrl = 'https://intercepted.com';
+      return options;
+    });
+
+    const interceptorId = client.interceptors.request.use(mockRequestInterceptor);
+
+    await client.get({
+      fetch: mockFetch,
+      url: '/test',
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith('https://intercepted.com/test', expect.anything());
+
+    client.interceptors.request.eject(interceptorId);
+  });
+  //fix: rebuild URL after request interceptors run (#3803)
+
+  it('applies interceptor mutations to baseUrl for SSE url', async () => {
+    const mockResponse = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      {
+        headers: {
+          'Content-Type': 'text/event-stream',
+        },
+        status: 200,
+      },
+    );
+
+    const mockFetch: MockFetch = vi.fn().mockResolvedValueOnce(mockResponse);
+
+    const interceptorId = client.interceptors.request.use((options: ResolvedRequestOptions) => {
+      options.baseUrl = 'https://intercepted.com';
+      return options;
+    });
+
+    const sse = await client.sse.get({
+      fetch: mockFetch,
+      url: '/test',
+    });
+
+    await sse.stream.next();
+
+    expect(mockFetch).toHaveBeenCalledWith('https://intercepted.com/test', expect.anything());
+
+    client.interceptors.request.eject(interceptorId);
+  });
+
+  it('applies interceptor mutations to path to the final URL', async () => {
+    const mockResponse = new Response(JSON.stringify({ success: true }), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      status: 200,
+    });
+
+    const mockFetch: MockFetch = vi.fn().mockResolvedValueOnce(mockResponse);
+
+    const mockRequestInterceptor = vi.fn().mockImplementation((options: ResolvedRequestOptions) => {
+      options.path = { id: '999' };
+      return options;
+    });
+
+    const interceptorId = client.interceptors.request.use(mockRequestInterceptor);
+
+    await client.get({
+      fetch: mockFetch,
+      path: { id: '123' },
+      url: '/resource/{id}',
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith('https://example.com/resource/999', expect.anything());
+
+    client.interceptors.request.eject(interceptorId);
+  });
+
+  it('applies interceptor mutations to query to the final URL', async () => {
+    const mockResponse = new Response(JSON.stringify({ success: true }), {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      status: 200,
+    });
+
+    const mockFetch: MockFetch = vi.fn().mockResolvedValueOnce(mockResponse);
+
+    const mockRequestInterceptor = vi.fn().mockImplementation((options: ResolvedRequestOptions) => {
+      options.query = { filter: 'intercepted', limit: 10 };
+      return options;
+    });
+
+    const interceptorId = client.interceptors.request.use(mockRequestInterceptor);
+
+    await client.get({
+      fetch: mockFetch,
+      query: { filter: 'original' },
+      url: '/test',
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://example.com/test?filter=intercepted&limit=10',
+      expect.anything(),
+    );
+
+    client.interceptors.request.eject(interceptorId);
+  });
 });

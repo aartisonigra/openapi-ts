@@ -233,13 +233,20 @@ export const createClient = (config: Config = {}): Client => {
       body: opts.body as BodyInit | null | undefined,
       method,
       onRequest: async (url, init) => {
-        let request = new Request(url, init);
         for (const fn of interceptors.request.fns) {
           if (fn) {
-            request = await fn(request, opts);
+            await fn(opts);
           }
         }
-        return request;
+
+        const finalUrl = buildUrl(opts);
+        const requestInit: RequestInit = {
+          ...init,
+          body: getValidRequestBody(opts),
+          headers: opts.headers,
+        };
+
+        return new Request(finalUrl, requestInit);
       },
       serializedBody: getValidRequestBody(opts) as BodyInit | null | undefined,
       url,

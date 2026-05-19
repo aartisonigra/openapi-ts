@@ -77,13 +77,16 @@ export const createClient = (config: Config = {}): Client => {
     let response: Response | undefined;
 
     try {
-      const { opts, url } = await beforeRequest(options);
+      const { opts } = await beforeRequest(options);
 
       for (const fn of interceptors.request.fns) {
         if (fn) {
           await fn(opts);
         }
       }
+
+      // Rebuild URL after interceptors run to capture any mutations to baseUrl, url, path, or query
+      const url = buildUrl(opts);
 
       // fetch must be assigned here, otherwise it would throw the error:
       // TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation
@@ -216,15 +219,20 @@ export const createClient = (config: Config = {}): Client => {
       body: opts.body as BodyInit | null | undefined,
       method,
       onRequest: async (url, init) => {
-        let request = new Request(url, init);
-        const requestInit = { ...init, url };
         for (const fn of interceptors.request.fns) {
           if (fn) {
-            await fn(requestInit as ResolvedRequestOptions);
-            request = new Request(requestInit.url, requestInit);
+            await fn(opts);
           }
         }
-        return request;
+
+        const finalUrl = buildUrl(opts);
+        const requestInit: RequestInit = {
+          ...init,
+          body: getValidRequestBody(opts),
+          headers: opts.headers,
+        };
+
+        return new Request(finalUrl, requestInit);
       },
       serializedBody: getValidRequestBody(opts) as BodyInit | null | undefined,
       url,
